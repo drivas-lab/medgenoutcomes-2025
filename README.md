@@ -37,7 +37,7 @@ Every panel is shown with its manuscript legend; the statistics supporting each 
 ## Repository contents
 
 - `index.html` – the rendered notebook served at the link above
-- `MedGenOutcomes2025_Final_UPDATED_v3.Rmd` – the R Markdown source that produces it
+- `MedGenOutcomes2025_ForUpload.Rmd` – the R Markdown source that produces it
 
 ## Reproducing the analysis
 
