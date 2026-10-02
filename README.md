@@ -60,9 +60,22 @@ This study was conducted at the University of Pennsylvania and approved by the U
 
 ## Citation
 
-A preprint is forthcoming; the citation will be added here when available. Until then, please cite this repository:
+If you use these results or this notebook, please cite the preprint:
 
-> Gold JI, Elkaim Y, Asher S, et al. Practice-Based Insights into Adult Genetics: High Diagnostic Yield, Demographic Determinants, and Patterns of Test Utilization across 10,000 Patient Encounters. Analysis notebook, Drivas Lab, University of Pennsylvania, 2026. https://drivas-lab.github.io/medgenoutcomes-2025/
+> Gold JI, Elkaim Y, Asher S, Raper A, Condit C, Bogus Z, Elysee I, Hennessy L, Kennedy E, Chai T, Cohen S, Gehringer BN, Gray SM, Streater A, Toye E, Kripke C, Nathanson KL, Rohanizadegan M, Kallish S, Drivas TG. Practice-Based Insights into Adult Genetics: High Diagnostic Yield, Demographic Determinants, and Patterns of Test Utilization across 10,000 Patient Encounters. *medRxiv* 2026. doi: [10.1101/2025.10.09.25337579](https://doi.org/10.1101/2025.10.09.25337579)
+
+```bibtex
+@article{Gold2026AdultGenetics,
+  title   = {Practice-Based Insights into Adult Genetics: High Diagnostic Yield, Demographic Determinants, and Patterns of Test Utilization across 10,000 Patient Encounters},
+  author  = {Gold, Jessica I and Elkaim, Yehuda and Asher, Stephanie and Raper, Anna and Condit, Courtney and Bogus, Zoe and Elysee, Isaac and Hennessy, Laura and Kennedy, Emma and Chai, Teresa and Cohen, Stacey and Gehringer, Brielle N and Gray, Shannon M and Streater, Ala and Toye, Eamon and Kripke, Colleen and Nathanson, Katherine L and Rohanizadegan, Mersedeh and Kallish, Staci and Drivas, Theodore G},
+  journal = {medRxiv},
+  year    = {2026},
+  doi     = {10.1101/2025.10.09.25337579},
+  url     = {https://www.medrxiv.org/content/10.1101/2025.10.09.25337579v2}
+}
+```
+
+The interactive notebook can be cited by its URL: https://drivas-lab.github.io/medgenoutcomes-2025/
 
 ## Contact
 
