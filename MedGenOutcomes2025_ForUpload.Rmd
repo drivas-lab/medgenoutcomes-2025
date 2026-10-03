@@ -209,7 +209,7 @@ Sections follow the manuscript figure by figure, and panels appear in the order 
 <tr><td><a href="#fig1">Figure 1</a></td><td>Demographics of the Penn Medicine Adult Genetics Clinic</td><td>A address heatmap · B age by sex · C sex · D race · E ethnicity · F provider type · G visit type · H insurance</td></tr>
 <tr><td><a href="#fig2">Figure 2</a></td><td>Demographic characteristics and visit types across clinical indications</td><td>A indications · B indications over time · C age by indication · D race by indication · E sex by indication · F visit type by indication</td></tr>
 <tr><td><a href="#fig3">Figure 3</a></td><td>Genetic testing utilization by visit type, demographics and indication</td><td>A by visit type · B by sex · C by age · D by race · E by indication</td></tr>
-<tr><td><a href="#fig4">Figure 4</a></td><td>Testing modalities and laboratory utilization over time</td><td>A test type · B test type over time · C laboratory · D laboratory over time</td></tr>
+<tr><td><a href="#fig4">Figure 4</a></td><td>Testing modalities and laboratory utilization over time</td><td>A test type · B test type over time · C test type by indication · D laboratory · E laboratory over time</td></tr>
 <tr><td><a href="#fig5">Figure 5</a></td><td>Genetic testing results by patient and test characteristics</td><td>A overall · B by sex · C by age · D by race · E by test type · F by indication</td></tr>
 <tr><td><a href="#fig6">Figure 6</a></td><td>Variants identified, by gene and indication group</td><td>Circular bar plot (+ per-group detail)</td></tr>
 <tr><td><a href="#fig7">Figure 7</a></td><td>WES/WGS results by patient and visit characteristics</td><td>A overall · B by sex · C by age · D by race · E by indication</td></tr>
@@ -4101,13 +4101,226 @@ DT::datatable(
 </details>
 
 
-## 4C · Testing laboratories used {#fig4c}
+## 4C · Type of testing sent, by indication group {#fig4c}
+
+<div class="caption"><span class="caplabel">Manuscript legend</span> Type of testing sent, by clinical indication group, for all tests sent during the study period. Each bar shows the proportion of tests of each type within an indication group, color-coded as in the legend "Testing Type, Percent of Total"; the number of tests in each group is shown beneath the axis label. Indication groups are ordered from left to right by decreasing proportion of NGS panels. Statistical comparison of each group's test-type distribution against all other groups combined (unadjusted chi-square, and multinomial logistic regression adjusted for age, EHR-reported sex and race, insurance class and visit type, Bonferroni-corrected across 21 groups) is given in the table below.</div>
+
+```{r fig4c-test-type-by-indication, fig.width=14, fig.height=7, message=FALSE, warning=FALSE}
+## ---------------------------------------------------------------------------
+## [Analysis / plot]  Figure 4 > 4C · Type of testing sent, by indication group
+## What    : Stacked bars of test type within each indication group, ordered by
+##           the share of NGS panels; n per group under the axis labels. Uses the
+##           same test-type ordering and palette as panel 4A.
+## Creates : category_by_indication, indication_levels, test_type_levels, x_labels, Plot.Category.Indication
+## ---------------------------------------------------------------------------
+
+category_by_indication <- MedGenData_Indications %>%
+  filter(
+    Testing_Sent == "Yes",
+    `Test.Category` != "?", !is.na(`Test.Category`), `Test.Category` != "NA",
+    !is.na(Indication.Group), Indication.Group != "NA"
+  ) %>%
+  count(Indication.Group, `Test.Category`, name = "n") %>%
+  group_by(Indication.Group) %>%
+  mutate(perc = n / sum(n), n_group = sum(n)) %>%
+  ungroup()
+
+# Indication groups ordered by the share of NGS panels (highest first);
+# test types ordered by overall frequency, matching the panel 4A palette
+indication_levels <- category_by_indication %>%
+  group_by(Indication.Group, n_group) %>%
+  summarise(ngs_perc = sum(perc[`Test.Category` == "NGS Panel"]), .groups = "drop") %>%
+  arrange(desc(ngs_perc))
+
+test_type_levels <- MedGenData_Indications %>%
+  filter(Testing_Sent == "Yes", `Test.Category` != "?", !is.na(`Test.Category`), `Test.Category` != "NA") %>%
+  count(`Test.Category`, sort = TRUE) %>%
+  pull(`Test.Category`)
+
+category_by_indication <- category_by_indication %>%
+  mutate(
+    Indication.Group = factor(Indication.Group, levels = indication_levels$Indication.Group),
+    `Test.Category`  = factor(`Test.Category`, levels = test_type_levels)
+  )
+
+x_labels <- setNames(
+  paste0(indication_levels$Indication.Group, "\n(n = ", indication_levels$n_group, ")"),
+  indication_levels$Indication.Group
+)
+
+Plot.Category.Indication <- category_by_indication %>%
+  ggplot(aes(x = Indication.Group, y = perc, fill = `Test.Category`)) +
+  geom_col(position = "stack") +
+  scale_x_discrete(labels = x_labels) +
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  labs(x = NULL, y = "Percent of Tests", fill = "Testing Type") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.major.x = element_blank()
+  ) +
+  scale_fill_manual(values = ggthemes::tableau_color_pal("Classic Cyclic")(length(test_type_levels)))
+
+# ---- display ----
+
+print(Plot.Category.Indication)
+```
+
+```{r fig4c-table, message=FALSE, warning=FALSE}
+## ---------------------------------------------------------------------------
+## [Interactive table]  Figure 4 > 4C · Type of testing sent, by indication group
+## What    : Counts and Percentages of Testing Types by Indication Group (Toggle: Counts or Percents)
+## Creates : summary_table_indication, col_names_ind, n_cols_ind, pct_cols_ind
+## ---------------------------------------------------------------------------
+
+summary_table_indication <- category_by_indication %>%
+  select(Indication.Group, n_group, `Test.Category`, n, perc) %>%
+  pivot_wider(
+    names_from  = `Test.Category`,
+    values_from = c(n, perc),
+    names_glue  = "{`Test.Category`} ({.value})",
+    values_fill = list(n = 0, perc = 0)
+  ) %>%
+  arrange(Indication.Group) %>%
+  mutate(Indication.Group = as.character(Indication.Group)) %>%
+  select(
+    `Indication Group` = Indication.Group,
+    `Tests sent` = n_group,
+    all_of(paste0(test_type_levels, " (n)")),
+    all_of(paste0(test_type_levels, " (perc)"))
+  ) %>%
+  rename_with(~ sub(" \\(perc\\)$", " (pct)", .x)) %>%
+  mutate(across(ends_with("(pct)"), ~ scales::percent(.x, accuracy = 0.1)))
+
+col_names_ind <- names(summary_table_indication)
+n_cols_ind    <- which(grepl("\\(n\\)",   col_names_ind)) - 1
+pct_cols_ind  <- which(grepl("\\(pct\\)", col_names_ind)) - 1
+
+datatable(
+  summary_table_indication,
+  extensions = "Buttons",
+  rownames = FALSE,
+  filter = "top",
+  options = list(
+    dom = "Bfrtip",
+    scrollX = TRUE,
+    pageLength = 25,
+    buttons = list(
+      list(extend = "colvisGroup", text = "Show Percents", show = pct_cols_ind, hide = n_cols_ind),
+      list(extend = "colvisGroup", text = "Show Counts",   show = n_cols_ind,   hide = pct_cols_ind)
+    ),
+    columnDefs = list(
+      list(visible = TRUE,  targets = pct_cols_ind),
+      list(visible = FALSE, targets = n_cols_ind)
+    )
+  ),
+  caption = "Counts and Percentages of Testing Types by Indication Group (Toggle: Counts or Percents)"
+)
+```
+
+<details class="stats">
+<summary>Test-type distribution by indication group: unadjusted and covariate-adjusted comparison of each group vs. all others</summary>
+
+```{r fig4c-stats, cache=TRUE, message=FALSE, warning=FALSE}
+## ---------------------------------------------------------------------------
+## [Statistics]  Figure 4 > 4C · Type of testing sent, by indication group
+## What    : Is the test-type distribution for each indication group different from
+##           all other groups? Unadjusted chi-square (with Cramér's V) and
+##           covariate-adjusted multinomial LRT, Bonferroni-corrected across groups.
+##           Cached: the 21 multinomial fits take a few minutes.
+## Creates : test_type_data, global_chisq, cramers_v, base_formula, fit_base, test_type_stats
+## ---------------------------------------------------------------------------
+
+test_type_data <- MedGenData_Indications %>%
+  filter(
+    Testing_Sent == "Yes",
+    `Test.Category` != "?", !is.na(`Test.Category`), `Test.Category` != "NA",
+    !is.na(Indication.Group), Indication.Group != "NA",
+    !is.na(FINANCIAL_CLASS), FINANCIAL_CLASS != "NULL",
+    !is.na(GENDER), GENDER != "X",
+    !is.na(VISIT_AGE), !is.na(RACE)
+  ) %>%
+  mutate(
+    Test.Category    = factor(`Test.Category`),
+    Indication.Group = factor(Indication.Group),
+    GENDER           = factor(GENDER),
+    RACE             = factor(RACE),
+    INSURANCE        = factor(collapse_insurance(FINANCIAL_CLASS)),
+    VISIT_TYPE       = factor(if_else(grepl("NEW|NPV", NEW_FOLLOWUP), "New", "Follow-up")),
+    # collapse rare test types (< 30 tests) into "Other" for the adjusted model only
+    Test.Category.Model = fct_lump_min(Test.Category, min = 30, other_level = "Other")
+  )
+
+stopifnot("test_type_data has no rows: check the filters above" = nrow(test_type_data) > 0)
+
+# Global test: does test type depend on indication group at all?
+global_chisq <- chisq.test(table(test_type_data$Indication.Group, test_type_data$Test.Category),
+                           simulate.p.value = TRUE, B = 2000)
+
+cramers_v <- function(tab) {
+  chi <- suppressWarnings(chisq.test(tab, correct = FALSE))$statistic
+  sqrt(as.numeric(chi) / (sum(tab) * (min(dim(tab)) - 1)))
+}
+
+base_formula <- Test.Category.Model ~ VISIT_AGE + GENDER + RACE + INSURANCE + VISIT_TYPE
+fit_base <- nnet::multinom(base_formula, data = test_type_data, trace = FALSE, maxit = 500)
+
+test_type_stats <- map_dfr(levels(test_type_data$Indication.Group), function(g) {
+  message("Fitting: ", g)
+  d <- test_type_data %>% mutate(is_group = factor(Indication.Group == g, levels = c(FALSE, TRUE)))
+  tab <- table(d$is_group, d$Test.Category)
+
+  # unadjusted: group vs. rest x test type (Monte Carlo p for sparse cells)
+  chi <- suppressWarnings(chisq.test(tab, simulate.p.value = TRUE, B = 2000))
+
+  # adjusted: LRT for adding the group indicator to the covariate model
+  fit_g <- nnet::multinom(update(base_formula, . ~ . + is_group), data = d, trace = FALSE, maxit = 500)
+  lrt   <- anova(fit_base, fit_g)
+  lrt_p  <- lrt[[grep("Pr", names(lrt))]][2]
+  lrt_df <- lrt[[grep("Df",  names(lrt))]][2]
+
+  tibble(
+    `Indication Group` = g,
+    `Tests (n)`        = sum(d$is_group == TRUE),
+    `Chi-square p (unadjusted)` = chi$p.value,
+    `Cramér's V`       = cramers_v(tab),
+    `LRT p (adjusted)` = lrt_p,
+    `LRT df`           = lrt_df
+  )
+}) %>%
+  mutate(
+    `Chi-square p (Bonferroni)` = p.adjust(`Chi-square p (unadjusted)`, method = "bonferroni"),
+    `LRT p (Bonferroni)`        = p.adjust(`LRT p (adjusted)`, method = "bonferroni"),
+    `Different from other groups (adjusted)` = if_else(`LRT p (Bonferroni)` < 0.05, "Yes", "No")
+  ) %>%
+  arrange(`LRT p (adjusted)`) %>%
+  mutate(
+    across(c(`Chi-square p (unadjusted)`, `Chi-square p (Bonferroni)`,
+             `LRT p (adjusted)`, `LRT p (Bonferroni)`), ~ signif(.x, 3)),
+    `Cramér's V` = round(`Cramér's V`, 3)
+  )
+
+cat("Global chi-square (indication group x test type): X-squared =",
+    round(global_chisq$statistic, 1), ", p =", signif(global_chisq$p.value, 3), "\n")
+
+datatable(
+  test_type_stats,
+  rownames = FALSE,
+  options  = list(pageLength = 25, scrollX = TRUE),
+  caption  = "Test-type distribution for each indication group vs. all other groups: unadjusted chi-square with Cramér's V, and multinomial likelihood-ratio test adjusted for age, sex, race, insurance class and visit type (Bonferroni-corrected across 21 groups)"
+)
+```
+
+</details>
+
+
+## 4D · Testing laboratories used {#fig4d}
 
 <div class="caption"><span class="caplabel">Manuscript legend</span> Testing laboratories used for all 4,245 tests; percentages relative to the total are shown in the legend.</div>
 
-```{r fig4c-labs-pie, fig.width=10, fig.height=5, message=FALSE, warning=FALSE}
+```{r fig4d-labs-pie, fig.width=10, fig.height=5, message=FALSE, warning=FALSE}
 ## ---------------------------------------------------------------------------
-## [Analysis / plot]  Figure 4 > 4C · Testing laboratories used
+## [Analysis / plot]  Figure 4 > 4D · Testing laboratories used
 ## What    : Builds and prints the plot for this section.
 ## Creates : lab_levels, Plot.Lab.Pie
 ## ---------------------------------------------------------------------------
@@ -4181,7 +4394,7 @@ print(Plot.Lab.Pie + guides(fill = guide_legend(ncol = 2)))
 
 ```{r datatable-labs, message=FALSE, warning=FALSE}
 ## ---------------------------------------------------------------------------
-## [Interactive table]  Figure 4 > 4C · Testing laboratories used
+## [Interactive table]  Figure 4 > 4D · Testing laboratories used
 ## What    : Summary of Genetic Tests Sent by Lab
 ## Creates : lab_table
 ## ---------------------------------------------------------------------------
@@ -4217,13 +4430,13 @@ datatable(
 ```
 
 
-## 4D · Testing laboratories used, over time {#fig4d}
+## 4E · Testing laboratories used, over time {#fig4e}
 
 <div class="caption"><span class="caplabel">Manuscript legend</span> Laboratory choice over time in 6-month intervals. Laboratories significantly increasing in utilization (Ambry) are marked with a red asterisk; those decreasing (UAB, Prevention, Penn, Fulgent, CTGT, ARUP) with a blue asterisk. Vertical lines mark payer, pricing and ordering-infrastructure events described in the Results: Blueprint Genetics introduced a $250 capped-cost policy for self-pay NGS panels in November 2018 and discontinued it in February 2021; Ambry test ordering was integrated into the Penn Medicine EHR in January 2020; Variantyx offered no-cost reflex from any NGS panel to genome sequencing from January 2022 to February 2023; and GeneDx became in-network with Independence Blue Cross in February 2023.</div>
 
-```{r fig4d-labs-over-time, fig.width=13.5, fig.height=6, message=FALSE, warning=FALSE}
+```{r fig4e-labs-over-time, fig.width=13.5, fig.height=6, message=FALSE, warning=FALSE}
 ## ---------------------------------------------------------------------------
-## [Analysis / plot]  Figure 4 > 4D · Testing laboratories used, over time
+## [Analysis / plot]  Figure 4 > 4E · Testing laboratories used, over time
 ## What    : Builds and prints the plot for this section.
 ## Creates : lab_levels, Plot.Lab.Half, vlines_df, breaks_6mo
 ## ---------------------------------------------------------------------------
@@ -4388,7 +4601,7 @@ print(Plot.Lab.Half +
 
 ```{r testing-labs-over-time-stats, fig.width=11, fig.height=8, warning=FALSE}
 ## ---------------------------------------------------------------------------
-## [Statistics]  Figure 4 > 4D · Testing laboratories used, over time
+## [Statistics]  Figure 4 > 4E · Testing laboratories used, over time
 ## What    : Change in Odds of Use for Each Lab Over Time (Binary Logistic Regression, Bonferroni Adjusted)
 ## Creates : lab_model_data, labs, lab_results, all_lab_results
 ## ---------------------------------------------------------------------------
@@ -4805,11 +5018,11 @@ DT::datatable(
 <details class="composite">
 <summary>Composite preview — all panels assembled as in the manuscript</summary>
 
-```{r fig4-composite, fig.width=18, fig.height=13}
+```{r fig4-composite, fig.width=18, fig.height=20}
 ## ---------------------------------------------------------------------------
 ## [Composite preview]  Figure 4 > Additional analysis: type of testing sent, by insurance class
 ## What    : Prints the fully assembled multi-panel figure object; wrapped in tryCatch so a layout error cannot stop the knit.
-## Creates : Plot.Type.All, Plot.Lab.Quarter, Plot.Lab
+## Creates : Plot.Type.All, Plot.Lab.Quarter, Plot.Lab, Figure4
 ## ---------------------------------------------------------------------------
 
 Plot.Type.All <- (Plot.Category | Plot.Category.Insurance) + plot_layout(widths = c(2,2))
@@ -4841,7 +5054,15 @@ Plot.Lab.Quarter <- MedGenData_Indications %>% filter(Lab != "?" & !is.na(Lab) &
 
 Plot.Lab <- Plot.Lab.Pie  | Plot.Lab.Half
 
-tryCatch(print(((Plot.Category + guides(fill = guide_legend(ncol = 1))) | (Plot.Test.Half + theme(legend.position = "none"))) / ((Plot.Lab.Pie + guides(fill = guide_legend(ncol = 1))) | (Plot.Lab.Half + theme(legend.position = "none"))) + plot_layout(guides = "collect")), error = function(e) cat("Composite could not be rendered in this session:", conditionMessage(e)))
+Figure4 <- (
+    ((Plot.Category + guides(fill = guide_legend(ncol = 1))) | (Plot.Test.Half + theme(legend.position = "none"))) /
+    (Plot.Category.Indication + theme(legend.position = "none")) /
+    ((Plot.Lab.Pie + guides(fill = guide_legend(ncol = 1))) | (Plot.Lab.Half + theme(legend.position = "none")))
+  ) +
+  plot_layout(guides = "collect", heights = c(1, 1.1, 1)) +
+  plot_annotation(tag_levels = "A")
+
+tryCatch(print(Figure4), error = function(e) cat("Composite could not be rendered in this session:", conditionMessage(e)))
 ```
 
 </details>
