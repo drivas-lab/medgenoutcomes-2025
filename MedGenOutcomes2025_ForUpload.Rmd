@@ -213,7 +213,7 @@ Sections follow the manuscript figure by figure, and panels appear in the order 
 <tr><td><a href="#fig5">Figure 5</a></td><td>Genetic testing results by patient and test characteristics</td><td>A overall · B by sex · C by age · D by race · E by test type · F by indication</td></tr>
 <tr><td><a href="#fig6">Figure 6</a></td><td>Variants identified, by gene and indication group</td><td>Circular bar plot (+ per-group detail)</td></tr>
 <tr><td><a href="#fig7">Figure 7</a></td><td>WES/WGS results by patient and visit characteristics</td><td>A overall · B by sex · C by age · D by race · E by indication</td></tr>
-<tr><td><a href="#figS1">Figure S1</a></td><td>Visit types over time</td><td>—</td></tr>
+<tr><td><a href="#figS1">Figure S1</a></td><td>Visit types over time and by provider type</td><td>A over time · B visit type by provider · C testing sent by provider · D test type by provider</td></tr>
 <tr><td><a href="#figS2">Figure S2</a></td><td>Visits by clinical indication and indication group</td><td>Circular bar plot (+ Table S1 and per-group detail)</td></tr>
 <tr><td><a href="#figS3">Figure S3</a></td><td>Age distributions and testing results by indication group</td><td>A–U, one panel per indication group</td></tr>
 <tr><td><a href="#figS4">Figure S4</a></td><td>Patients receiving WES/WGS vs. other genetic tests</td><td>A–B indication · C–D race · E–F sex · G–H insurance · I age</td></tr>
@@ -10342,9 +10342,11 @@ tryCatch(print(Plot.Testing.Results.Combined.WES), error = function(e) cat("Comp
 
 # <span class="fig-badge">Supplement</span> Supplementary material {#supp}
 
-## Figure S1 · Visit types over time {#figS1}
+## Figure S1 · Visit types over time and by provider type {#figS1}
 
-<div class="caption"><span class="caplabel">Manuscript legend</span> Type of visit (new patient vs. follow-up, in person vs. telehealth) over time in 6-month intervals. Telehealth rose sharply in 2020 with the COVID-19 pandemic and local stay-at-home orders; it declined afterwards, especially for new-patient evaluations, but remains a large share of follow-up visits.</div>
+### S1A · Visit types over time {#figS1a}
+
+<div class="caption"><span class="caplabel">Manuscript legend</span> Type of visit (new patient vs. follow-up, in person vs. telehealth) for all visits, shown over time in 6-month intervals from October 1, 2016, to September 30, 2024. Telehealth was introduced in 2020 with the COVID-19 pandemic and associated stay-at-home orders; it has since declined, particularly for new-patient evaluations, but remains a substantial component of follow-up care.</div>
 
 ```{r figs1-visit-types-over-time, message=FALSE, warning=FALSE, fig.width=10, fig.height=6.5}
 ## ---------------------------------------------------------------------------
@@ -10407,6 +10409,272 @@ p_visittype_time <- ggplot(visit_over_time_complete, aes(x = CONTACT_DATE_HALF, 
 print(p_visittype_time)
 ```
 
+
+
+### S1B · Visit type, by provider type {#figS1b}
+
+<div class="caption"><span class="caplabel">Manuscript legend</span> Type of visit, by provider type, for all visits with a documented provider. Provider types are physician with genetic counselor, genetic counselor only, and nurse practitioner; visit types are color-coded as in panel A. Numbers of visits are shown beneath each axis label.</div>
+
+```{r figs1-provider-setup, message=FALSE, warning=FALSE}
+## ---------------------------------------------------------------------------
+## [Shared preparation]  Supplement > Figure S1 > panels B-D
+## What    : Provider-type rule (same as Figure 1F), pattern-based visit-type
+##           recode, colours, and the test-type order/palette used in Figure 4.
+## Creates : provider_type_of, provider_levels, visit_levels, visit_colors_provider,
+##           test_type_colors, n_label, provider_base
+## ---------------------------------------------------------------------------
+
+provider_type_of <- function(provider_name) {
+  dplyr::case_when(
+    grepl("BONANNI", provider_name, ignore.case = TRUE)                                                ~ "Nurse Practitioner",
+    grepl("NATHANSON|PYERITZ|KALLISH|ROHANIZADEGAN|DRIVAS|\\bNG\\b", provider_name, ignore.case = TRUE) ~ "Physician + GC",
+    TRUE                                                                                               ~ "GC Only"
+  )
+}
+provider_levels <- c("Physician + GC", "GC Only", "Nurse Practitioner")
+
+# New-patient types first so they stack on top of the follow-up types
+visit_levels <- c("New patient visit", "New patient visit, telehealth", "Follow up", "Follow up, telehealth")
+visit_colors_provider <- c(
+  "New patient visit"             = "#9a19f5",
+  "New patient visit, telehealth" = "#bd0ab4",
+  "Follow up"                     = "#eea110",
+  "Follow up, telehealth"         = "#fbe300"
+)
+
+# test_type_levels is defined in the Figure 4C chunk; colours keyed by name so they match 4A/4C
+test_type_colors <- setNames(ggthemes::tableau_color_pal("Classic Cyclic")(length(test_type_levels)),
+                             test_type_levels)
+
+n_label <- function(df) {           # "Provider\n(n = ...)" axis labels
+  d <- distinct(df, Provider_Type, n_provider)
+  setNames(paste0(d$Provider_Type, "\n(n = ", d$n_provider, ")"), d$Provider_Type)
+}
+
+provider_base <- MedGenRawData2025 %>%
+  filter(PROVIDER_NAME != "?", !is.na(PROVIDER_NAME), PROVIDER_NAME != "X") %>%
+  mutate(
+    Provider_Type = factor(provider_type_of(PROVIDER_NAME), levels = provider_levels),
+    VisitType = case_when(
+      grepl("NEW|NPV", NEW_FOLLOWUP) & grepl("TELE", NEW_FOLLOWUP)            ~ "New patient visit, telehealth",
+      grepl("NEW|NPV", NEW_FOLLOWUP)                                          ~ "New patient visit",
+      grepl("RETURN|RPV|FOLLOW", NEW_FOLLOWUP) & grepl("TELE", NEW_FOLLOWUP) ~ "Follow up, telehealth",
+      grepl("RETURN|RPV|FOLLOW", NEW_FOLLOWUP)                               ~ "Follow up",
+      TRUE ~ NA_character_
+    ),
+    VisitType   = factor(VisitType, levels = visit_levels),
+    New_Patient = grepl("NEW|NPV", NEW_FOLLOWUP)
+  )
+```
+
+```{r figs1b-visit-type-by-provider, message=FALSE, warning=FALSE, fig.width=9, fig.height=6}
+## ---------------------------------------------------------------------------
+## [Analysis / plot]  Supplement > Figure S1 > S1B · Visit type, by provider type
+## What    : Stacked bars of the four visit types within each provider type.
+## Creates : visits_by_provider, p_visittype_provider
+## ---------------------------------------------------------------------------
+
+visits_by_provider <- provider_base %>%
+  filter(!is.na(VisitType)) %>%
+  count(Provider_Type, VisitType, name = "n", .drop = FALSE) %>%
+  group_by(Provider_Type) %>%
+  mutate(prop = n / sum(n), n_provider = sum(n)) %>%
+  ungroup()
+
+p_visittype_provider <- ggplot(visits_by_provider, aes(x = Provider_Type, y = prop, fill = VisitType)) +
+  geom_col(position = "stack") +
+  scale_x_discrete(labels = n_label(visits_by_provider), drop = FALSE) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
+  scale_fill_manual(values = visit_colors_provider, drop = FALSE) +
+  labs(x = NULL, y = "Percent of Visits", fill = "Visit Type") +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor = element_blank())
+
+# ---- display ----
+
+print(p_visittype_provider)
+```
+
+```{r figs1b-table, message=FALSE, warning=FALSE}
+## ---------------------------------------------------------------------------
+## [Interactive table]  Supplement > Figure S1 > S1B · Visit type, by provider type
+## What    : Visit counts and percentages by provider type, with new-patient and
+##           telehealth shares.
+## Creates : visits_by_provider_table, visits_by_provider_summary
+## ---------------------------------------------------------------------------
+
+visits_by_provider_table <- visits_by_provider %>%
+  mutate(cell = paste0(n, " (", scales::percent(prop, accuracy = 0.1), ")")) %>%
+  select(VisitType, Provider_Type, cell) %>%
+  pivot_wider(names_from = Provider_Type, values_from = cell, values_fill = "0 (0.0%)") %>%
+  rename(`Visit Type` = VisitType)
+
+visits_by_provider_summary <- visits_by_provider %>%
+  group_by(Provider_Type) %>%
+  summarise(
+    `Visits (n)`                        = sum(n),
+    `New patient (% of visits)`         = sum(n[grepl("New", VisitType)]) / sum(n),
+    `Follow-up (% of visits)`           = sum(n[grepl("Follow", VisitType)]) / sum(n),
+    `Telehealth (% of all visits)`      = sum(n[grepl("telehealth", VisitType)]) / sum(n),
+    `Telehealth (% of new-patient)`     = sum(n[VisitType == "New patient visit, telehealth"]) / sum(n[grepl("New", VisitType)]),
+    `Telehealth (% of follow-up)`       = sum(n[VisitType == "Follow up, telehealth"]) / sum(n[grepl("Follow", VisitType)]),
+    .groups = "drop"
+  ) %>%
+  mutate(across(-c(Provider_Type, `Visits (n)`), ~ scales::percent(.x, accuracy = 0.1))) %>%
+  rename(`Provider Type` = Provider_Type)
+
+datatable(visits_by_provider_table, rownames = FALSE, options = list(dom = "t"),
+          caption = "Visit type by provider type: counts and percentages (column percentages)")
+datatable(visits_by_provider_summary, rownames = FALSE, options = list(dom = "t"),
+          caption = "Visit type by provider type: new-patient and telehealth shares")
+```
+
+### S1C · Testing sent at new-patient visits, by provider type {#figS1c}
+
+<div class="caption"><span class="caplabel">Manuscript legend</span> Proportion of new-patient visits at which genetic testing was sent, by provider type; the percent tested is shown within each bar. Numbers of new-patient visits are shown beneath each axis label.</div>
+
+```{r figs1c-testing-by-provider, message=FALSE, warning=FALSE, fig.width=9, fig.height=6}
+## ---------------------------------------------------------------------------
+## [Analysis / plot]  Supplement > Figure S1 > S1C · Testing sent at new-patient visits, by provider type
+## What    : Proportion of new-patient visits with testing sent, by provider type;
+##           same colours as Figure 3.
+## Creates : testing_by_provider, p_testing_provider
+## ---------------------------------------------------------------------------
+
+testing_by_provider <- provider_base %>%
+  filter(New_Patient, Testing_Sent %in% c("Yes", "No")) %>%
+  mutate(Testing_Sent = factor(Testing_Sent, levels = c("No", "Yes"))) %>%
+  count(Provider_Type, Testing_Sent, name = "n", .drop = FALSE) %>%
+  group_by(Provider_Type) %>%
+  mutate(prop = n / sum(n), n_provider = sum(n)) %>%
+  ungroup()
+
+p_testing_provider <- ggplot(testing_by_provider, aes(x = Provider_Type, y = prop, fill = Testing_Sent)) +
+  geom_col(position = "stack") +
+  geom_text(data = filter(testing_by_provider, Testing_Sent == "Yes", n > 0),
+            aes(label = scales::percent(prop, accuracy = 0.1), y = prop / 2),
+            colour = "white", fontface = "bold") +
+  scale_x_discrete(labels = n_label(testing_by_provider), drop = FALSE) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
+  scale_fill_manual(values = c("Yes" = "chartreuse3", "No" = "maroon3")) +
+  labs(x = NULL, y = "Percent of New-Patient Visits", fill = "Testing Sent") +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor = element_blank())
+
+# ---- display ----
+
+print(p_testing_provider)
+```
+
+```{r figs1c-table, message=FALSE, warning=FALSE}
+## ---------------------------------------------------------------------------
+## [Interactive table]  Supplement > Figure S1 > S1C · Testing sent at new-patient visits, by provider type
+## What    : Counts and percentages of new-patient visits with and without testing, by provider type.
+## Creates : testing_by_provider_table
+## ---------------------------------------------------------------------------
+
+testing_by_provider_table <- testing_by_provider %>%
+  mutate(cell = paste0(n, " (", scales::percent(prop, accuracy = 0.1), ")")) %>%
+  select(Testing_Sent, Provider_Type, cell) %>%
+  pivot_wider(names_from = Provider_Type, values_from = cell, values_fill = "0 (0.0%)") %>%
+  rename(`Testing Sent` = Testing_Sent)
+
+datatable(testing_by_provider_table, rownames = FALSE, options = list(dom = "t"),
+          caption = "Testing sent at new-patient visits, by provider type: counts and percentages")
+```
+
+### S1D · Type of testing sent at new-patient visits, by provider type {#figS1d}
+
+<div class="caption"><span class="caplabel">Manuscript legend</span> Type of testing sent at new-patient visits, by provider type; testing types are color-coded as in Figure 4, "Testing Type, Percent of Total." Numbers of tests are shown beneath each axis label.</div>
+
+```{r figs1d-test-type-by-provider, message=FALSE, warning=FALSE, fig.width=9, fig.height=6}
+## ---------------------------------------------------------------------------
+## [Analysis / plot]  Supplement > Figure S1 > S1D · Type of testing sent, by provider type
+## What    : Stacked bars of test type within each provider type for tests sent at
+##           new-patient visits; same test-type order and palette as Figure 4A/4C.
+## Creates : testtype_by_provider, p_testtype_provider
+## ---------------------------------------------------------------------------
+
+testtype_by_provider <- provider_base %>%
+  filter(New_Patient, Testing_Sent == "Yes",
+         `Test.Category` != "?", !is.na(`Test.Category`), `Test.Category` != "NA") %>%
+  mutate(`Test.Category` = factor(`Test.Category`, levels = test_type_levels)) %>%
+  count(Provider_Type, `Test.Category`, name = "n") %>%
+  group_by(Provider_Type) %>%
+  mutate(prop = n / sum(n), n_provider = sum(n)) %>%
+  ungroup()
+
+p_testtype_provider <- ggplot(testtype_by_provider, aes(x = Provider_Type, y = prop, fill = `Test.Category`)) +
+  geom_col(position = "stack") +
+  scale_x_discrete(labels = n_label(testtype_by_provider), drop = FALSE) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
+  scale_fill_manual(values = test_type_colors, drop = FALSE) +
+  labs(x = NULL, y = "Percent of Tests Sent", fill = "Testing Type") +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor = element_blank())
+
+# ---- display ----
+
+print(p_testtype_provider)
+```
+
+```{r figs1d-table, message=FALSE, warning=FALSE}
+## ---------------------------------------------------------------------------
+## [Interactive table]  Supplement > Figure S1 > S1D · Type of testing sent, by provider type
+## What    : Counts and percentages of each test type by provider type, plus a
+##           grouped summary (single-site, single-gene, NGS panel, broad/specialized).
+## Creates : testtype_by_provider_table, broad_tests, testtype_by_provider_summary
+## ---------------------------------------------------------------------------
+
+testtype_by_provider_table <- testtype_by_provider %>%
+  mutate(cell = paste0(n, " (", scales::percent(prop, accuracy = 0.1), ")")) %>%
+  select(`Test.Category`, Provider_Type, cell) %>%
+  pivot_wider(names_from = Provider_Type, values_from = cell, values_fill = "0 (0.0%)") %>%
+  rename(`Test Type` = `Test.Category`)
+
+broad_tests <- c("WES", "WGS", "CMA", "Karyotype", "Metabolic", "Mitochondrial sequencing")
+
+testtype_by_provider_summary <- testtype_by_provider %>%
+  group_by(Provider_Type) %>%
+  summarise(
+    `Tests (n)`                      = sum(n),
+    `Single site (%)`                = sum(prop[`Test.Category` == "Single Site"]),
+    `Single gene (%)`                = sum(prop[`Test.Category` == "Single Gene"]),
+    `NGS panel (%)`                  = sum(prop[`Test.Category` == "NGS Panel"]),
+    `Broad / specialized (%)`        = sum(prop[`Test.Category` %in% broad_tests]),
+    .groups = "drop"
+  ) %>%
+  mutate(across(-c(Provider_Type, `Tests (n)`), ~ scales::percent(.x, accuracy = 0.1))) %>%
+  rename(`Provider Type` = Provider_Type)
+
+datatable(testtype_by_provider_table, rownames = FALSE, options = list(pageLength = 15, dom = "t"),
+          caption = "Type of testing sent at new-patient visits, by provider type: counts and percentages (column percentages)")
+datatable(testtype_by_provider_summary, rownames = FALSE, options = list(dom = "t"),
+          caption = "Grouped summary: broad/specialized = WES, WGS, CMA, karyotype, metabolic and mitochondrial testing")
+```
+
+<details class="composite">
+<summary>Composite preview — all panels assembled as in the manuscript</summary>
+
+```{r figs1-composite, fig.width=16, fig.height=12}
+## ---------------------------------------------------------------------------
+## [Composite preview]  Supplement > Figure S1
+## What    : Panels A-D assembled as in the manuscript, legends collected at right.
+## Creates : FigureS1
+## ---------------------------------------------------------------------------
+
+FigureS1 <- (
+    (p_visittype_time + guides(fill = "none") + labs(title = NULL)) /
+    (p_visittype_provider + p_testing_provider + p_testtype_provider)
+  ) +
+  plot_layout(guides = "collect") +
+  plot_annotation(tag_levels = "A") &
+  theme(legend.direction = "vertical", legend.box = "vertical", legend.justification = "top")
+
+tryCatch(print(FigureS1), error = function(e) cat("Composite could not be rendered in this session:", conditionMessage(e)))
+```
+
+</details>
 
 ## Figure S2 · Visits by clinical indication and indication group {#figS2}
 
